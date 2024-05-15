@@ -1,5 +1,4 @@
-﻿using Guardian;
-using System;
+﻿using System;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
@@ -8,12 +7,10 @@ using System.Net.Http;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 
-namespace Launcher
+namespace Paradis
 {
     public partial class MainWindow : Form
     {
-        private static readonly HttpClient httpClient = new HttpClient();
-
         public MainWindow()
         {
             InitializeComponent();
@@ -21,17 +18,22 @@ namespace Launcher
 
         private void MainWindow_Load(object sender, EventArgs args)
         {
-            OutputLogBox.AutoWordSelection = true;
+            renderApiSources.Add(new RenderAPI("Direct3D 9", "-force-d3d9"));
+            renderApiSources.Add(new RenderAPI("Direct3D 11", "-force-d3d11"));
+            renderApiSources.Add(new RenderAPI("OpenGL", "-force-opengl"));
+            renderApiBox.Refresh();
 
             InformationLbl.Text = string.Format(InformationLbl.Text, Environment.OSVersion.VersionString, Constants.OSArch, Constants.AppVersion);
             InformationLbl.Refresh();
 
-            httpClient.Timeout = TimeSpan.MaxValue;
+            OutputLogBox.AutoWordSelection = true;
+
+            Constants.Web.Timeout = TimeSpan.FromMilliseconds(int.MaxValue);
         }
 
         private void MainWindow_Closing(object sender, CancelEventArgs e)
         {
-            httpClient.Dispose();
+            Constants.Web.Dispose();
         }
 
         private void SetLogText(string message)
@@ -57,6 +59,7 @@ namespace Launcher
                     AppendToLog("Starting Guardian...");
                 }
 
+
                 ProcessStartInfo psi = new ProcessStartInfo
                 {
                     UseShellExecute = true,
@@ -64,12 +67,20 @@ namespace Launcher
                     WorkingDirectory = Constants.InstallDir
                 };
 
+                psi.Arguments = string.Format("-screen-width {0} -screen-height {1} -screen-fullscreen {2} {3}",
+                    widthField.Value, heightField.Value, fullScreenTgl.Checked ? 1 : 0, ((RenderAPI)renderApiBox.SelectedItem).Command);
+
                 Process.Start(psi);
                 AppendToLog("\n");
+
+                AppendToLog($"Width: {widthField.Value}\n");
+                AppendToLog($"Height: {heightField.Value}\n");
+                AppendToLog($"Fullscreen? {fullScreenTgl.Checked}\n");
+                AppendToLog($"Rendering API: {renderApiBox.SelectedItem}\n");
             }
             catch (Exception ex)
             {
-                AppendToLog($"FAILED\n\n{ex}");
+                AppendToLog($"\n\n{ex}");
             }
         }
 
@@ -79,10 +90,11 @@ namespace Launcher
 
             Task.Run(async () =>
             {
-                // Get and print the latest build information
+                // Download and display build information
                 try
                 {
                     AppendToLog("\nObtaining latest build information...");
+
                     string versionData = await GetVersionData();
                     AppendToLog($"\n{versionData}");
 
@@ -94,78 +106,62 @@ namespace Launcher
                         string latestBuild = buildInfo[1].Trim();
                         if (latestBuild.Equals(Constants.AppVersion)) break;
 
-                        AppendToLog("\nYour copy of the Guardian Mod Launcher is OUT OF DATE, please update!");
-                        AppendToLog("\n\t- https://cb.run/GuardianAoT");
+                        AppendToLog("\nYour copy of Paradis is OUT OF DATE, please UPDATE!");
+                        AppendToLog("\n\t- https://aottgfan.site/clients/");
                     }
-                }
-                catch
-                {
-                    AppendToLog($"!! ERROR !! (This is *probably* fine?...)\n");
-                }
-
-                byte[] gameZipData;
-                // Get the binary data
-                try
-                {
-                    AppendToLog($"\nDownloading binaries for {Constants.OSArch}-bit Windows...");
-                    gameZipData = await GetGameData();
                 }
                 catch (Exception ex)
                 {
-                    SetLogText($"!! ERROR !! Could not download client files.\n\n{ex}");
-                    return;
+                    AppendToLog($"!! WARNING !! Could not obtain build information!\n\n{ex}\n");
                 }
 
-                FileInfo gameZip = new FileInfo(Constants.InstallDir + $"\\{Constants.BinaryName}");
-                // Delete previous ZIP to try and minimize unintended behaviour
-                if (gameZip.Exists)
-                {
-                    try
-                    {
-                        AppendToLog($"\nDeleting previous ZIP...");
-                        gameZip.Delete();
-                    }
-                    catch (Exception ex)
-                    {
-                        SetLogText($"!! ERROR !! Please delete any pre-existing ZIP files and retry.\n\n{ex}");
-                        return;
-                    }
-                }
-
-                // Write ZIP data to local file
+                // Download zipped client
+                byte[] zippedClientData;
                 try
                 {
-                    AppendToLog($"\nWriting ZIP data to {gameZip.FullName}...");
-                    await WriteGameData(gameZip, gameZipData);
+                    AppendToLog($"\nDownloading client for {Constants.OSArch}-bit Windows...");
+                    zippedClientData = await GetGameData();
                 }
                 catch (Exception ex)
                 {
-                    SetLogText($"!! ERROR !! Could not save client files...\n\n{ex}\n");
+                    SetLogText($"!! ERROR !! Could not download client data!\n\n{ex}");
                     return;
                 }
 
-                // Extract ZIP contents to current working directory
+                // Write zipped client data to local file
+                FileInfo zippedClientFile = new FileInfo(Constants.InstallDir + $"\\{Constants.BinaryName}");
                 try
                 {
-                    AppendToLog($"\nExtracting {gameZip.FullName} to current directory ({Constants.InstallDir})...");
-                    ExtractToDirectory(gameZip);
+                    await WriteGameData(zippedClientFile, zippedClientData);
                 }
                 catch (Exception ex)
                 {
-                    SetLogText($"!! ERROR !! Could not extract client files...\n\n{ex}\n");
+                    SetLogText($"!! ERROR !! Could not save client data!\n\n{ex}");
                     return;
                 }
 
-                // Delete ZIP file since we're done with it
+                // Extract zipped client contents to current working directory
+                try
+                {
+                    AppendToLog($"\nExtracting {zippedClientFile.FullName} to {Constants.InstallDir}");
+                    ExtractToDirectory(zippedClientFile);
+                }
+                catch (Exception ex)
+                {
+                    SetLogText($"!! ERROR !! Could not extract client data!\n\n{ex}");
+                    return;
+                }
+
+                // Delete zipped client since we're (hopefully) done with it
                 try
                 {
                     AppendToLog("\nCleaning up...");
-                    gameZip.Delete();
+                    zippedClientFile.Delete();
                     AppendToLog("\n");
                 }
-                catch
+                catch (Exception ex)
                 {
-                    AppendToLog($"!! ERROR !! (This is *probably* fine?...)\n");
+                    AppendToLog($"!! ERROR !! Could not delete update file! (This is *probably* fine?...)\n\n{ex}");
                 }
 
                 StartGame(false);
@@ -174,19 +170,19 @@ namespace Launcher
 
         private async Task<string> GetVersionData()
         {
-            return await httpClient.GetStringAsync($"{Constants.VersionsURL}?t={Environment.TickCount}");
+            return await Constants.Web.GetStringAsync($"{Constants.VersionsURL}?t={Environment.TickCount}");
         }
 
         private async Task<byte[]> GetGameData()
         {
-            return await httpClient.GetByteArrayAsync($"{Constants.GameDataURL}?t=" + Environment.TickCount);
+            return await Constants.Web.GetByteArrayAsync($"{Constants.GameDataURL}?t=" + Environment.TickCount);
         }
 
-        private async Task WriteGameData(FileInfo file, byte[] binData)
+        private async Task WriteGameData(FileInfo file, byte[] data)
         {
             using (FileStream fs = file.OpenWrite())
             {
-                await fs.WriteAsync(binData, 0, binData.Length);
+                await fs.WriteAsync(data, 0, data.Length);
             }
         }
 

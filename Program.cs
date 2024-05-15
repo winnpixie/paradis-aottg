@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Windows.Forms;
 
-namespace Launcher
+namespace Paradis
 {
     static class Program
     {
