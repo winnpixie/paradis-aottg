@@ -3,7 +3,6 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 using System.IO.Compression;
-using System.Net.Http;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 
@@ -18,32 +17,30 @@ namespace Paradis
 
         private void MainWindow_Load(object sender, EventArgs args)
         {
-            renderApiSources.Add(new RenderAPI("Direct3D 9", "-force-d3d9"));
-            renderApiSources.Add(new RenderAPI("Direct3D 11", "-force-d3d11"));
-            renderApiSources.Add(new RenderAPI("OpenGL", "-force-opengl"));
-            renderApiBox.Refresh();
+            RenderApiSrcs.Add(RenderApi.D3D9);
+            RenderApiSrcs.Add(RenderApi.D3D11);
+            RenderApiSrcs.Add(RenderApi.OpenGL);
+            RenderApiBox.Refresh();
 
             InformationLbl.Text = string.Format(InformationLbl.Text, Environment.OSVersion.VersionString, Constants.OSArch, Constants.AppVersion);
             InformationLbl.Refresh();
 
-            OutputLogBox.AutoWordSelection = true;
-
-            Constants.Web.Timeout = TimeSpan.FromMilliseconds(int.MaxValue);
+            LogBox.AutoWordSelection = true;
         }
 
         private void MainWindow_Closing(object sender, CancelEventArgs e)
         {
-            Constants.Web.Dispose();
+            Constants.Web.Value.Dispose();
         }
 
         private void SetLogText(string message)
         {
-            OutputLogBox.Text = message;
+            LogBox.Text = message;
         }
 
         private void AppendToLog(string message)
         {
-            OutputLogBox.Text += message;
+            LogBox.Text += message;
         }
 
         private void StartGame(bool clearLog)
@@ -68,15 +65,15 @@ namespace Paradis
                 };
 
                 psi.Arguments = string.Format("-screen-width {0} -screen-height {1} -screen-fullscreen {2} {3}",
-                    widthField.Value, heightField.Value, fullScreenTgl.Checked ? 1 : 0, ((RenderAPI)renderApiBox.SelectedItem).Command);
+                    WidthFld.Value, HeightFld.Value, FullScreenOpt.Checked ? 1 : 0, ((RenderApi)RenderApiBox.SelectedItem).Command);
 
                 Process.Start(psi);
                 AppendToLog("\n");
 
-                AppendToLog($"Width: {widthField.Value}\n");
-                AppendToLog($"Height: {heightField.Value}\n");
-                AppendToLog($"Fullscreen? {fullScreenTgl.Checked}\n");
-                AppendToLog($"Rendering API: {renderApiBox.SelectedItem}\n");
+                AppendToLog($"Width: {WidthFld.Value}\n");
+                AppendToLog($"Height: {HeightFld.Value}\n");
+                AppendToLog($"Fullscreen {FullScreenOpt.Checked}\n");
+                AppendToLog($"Rendering API: {RenderApiBox.SelectedItem}\n");
             }
             catch (Exception ex)
             {
@@ -161,21 +158,21 @@ namespace Paradis
                 }
                 catch (Exception ex)
                 {
-                    AppendToLog($"!! ERROR !! Could not delete update file! (This is *probably* fine?...)\n\n{ex}");
+                    AppendToLog($"!! WARNING !! Could not delete update file! (This is *probably* fine?...)\n\n{ex}");
                 }
 
-                StartGame(false);
+                if (AutoPlayAfterUpdateOpt.Checked) StartGame(false);
             });
         }
 
         private async Task<string> GetVersionData()
         {
-            return await Constants.Web.GetStringAsync($"{Constants.VersionsURL}?t={Environment.TickCount}");
+            return await Constants.Web.Value.GetStringAsync($"{Constants.VersionUrl}?t={Environment.TickCount}");
         }
 
         private async Task<byte[]> GetGameData()
         {
-            return await Constants.Web.GetByteArrayAsync($"{Constants.GameDataURL}?t=" + Environment.TickCount);
+            return await Constants.Web.Value.GetByteArrayAsync($"{Constants.BinaryUrl}?t=" + Environment.TickCount);
         }
 
         private async Task WriteGameData(FileInfo file, byte[] data)
