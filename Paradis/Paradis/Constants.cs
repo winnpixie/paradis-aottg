@@ -5,11 +5,11 @@ namespace Paradis
 {
     internal class Constants
     {
-        public static readonly string AppVersion = "1.1.0";
+        public static readonly string AppVersion = "1.1.1";
         public static readonly string InstallDir = Environment.CurrentDirectory;
         public static readonly int OSArch = Environment.Is64BitOperatingSystem ? 64 : 32;
 
-        public static readonly string BaseUrl = "https://aottgfan.site/clients/guardian";
+        public static readonly string BaseUrl = "https://aottg.winnpixie.com/clients/guardian";
         public static readonly string VersionUrl = BaseUrl + "/version.txt";
         public static readonly string BinaryName = "Guardian_Win" + OSArch + ".zip";
         public static readonly string BinaryUrl = BaseUrl + "/" + BinaryName;

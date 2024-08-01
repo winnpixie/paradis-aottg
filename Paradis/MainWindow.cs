@@ -104,7 +104,7 @@ namespace Paradis
                         if (latestBuild.Equals(Constants.AppVersion)) break;
 
                         AppendToLog("\nYour copy of Paradis is OUT OF DATE, please UPDATE!");
-                        AppendToLog("\n\t- https://aottgfan.site/clients/");
+                        AppendToLog("\n\t- https://aottg.winnpixie.com/");
                     }
                 }
                 catch (Exception ex)
