@@ -17,20 +17,45 @@ namespace Paradis
 
         private void MainWindow_Load(object sender, EventArgs args)
         {
+            // Init Render APIs
             RenderApiSrcs.Add(RenderApi.D3D9);
             RenderApiSrcs.Add(RenderApi.D3D11);
             RenderApiSrcs.Add(RenderApi.OpenGL);
             RenderApiBox.Refresh();
 
-            InformationLbl.Text = string.Format(InformationLbl.Text, Environment.OSVersion.VersionString, Constants.OSArch, Constants.AppVersion);
+            // Update Program Information Label
+            InformationLbl.Text = string.Format(InformationLbl.Text, Environment.OSVersion.VersionString, Constants.PlatformArch, Constants.AppVersion);
             InformationLbl.Refresh();
 
-            LogBox.AutoWordSelection = true;
+            // Set Initial Video Mode
+            System.Drawing.Rectangle videoMode = Screen.PrimaryScreen.Bounds;
+            WidthFld.Value = videoMode.Width;
+            HeightFld.Value = videoMode.Height;
         }
 
         private void MainWindow_Closing(object sender, CancelEventArgs e)
         {
-            Constants.Web.Value.Dispose();
+            Constants.HttpClient.Value.Dispose();
+        }
+
+        private void LogInfo(string message)
+        {
+            AppendToLog($"[INFO] {message}");
+        }
+
+        private void LogWarning(string warning)
+        {
+            AppendToLog($"[WARN] {warning}");
+        }
+
+        private void LogError(string error)
+        {
+            AppendToLog($"[ERR] {error}");
+        }
+
+        private void AppendToLog(string message)
+        {
+            SetLogText($"{LogBox.Text}{message}\n");
         }
 
         private void SetLogText(string message)
@@ -38,169 +63,175 @@ namespace Paradis
             LogBox.Text = message;
         }
 
-        private void AppendToLog(string message)
-        {
-            LogBox.Text += message;
-        }
-
         private void StartGame(bool clearLog)
         {
+            if (clearLog)
+            {
+                SetLogText("Starting AoTTG\n");
+            }
+            else
+            {
+                LogInfo("Starting AoTTG");
+            }
+
+            LogInfo($"Width: {WidthFld.Value}");
+            LogInfo($"Height: {HeightFld.Value}");
+            LogInfo($"Fullscreen {FullScreenOpt.Checked}");
+            LogInfo($"Rendering API: {RenderApiBox.SelectedItem}");
+
             try
             {
-                if (clearLog)
-                {
-                    SetLogText("Starting Guardian...");
-                }
-                else
-                {
-                    AppendToLog("Starting Guardian...");
-                }
-
-
                 ProcessStartInfo psi = new ProcessStartInfo
                 {
                     UseShellExecute = true,
                     FileName = "Guardian.exe",
-                    WorkingDirectory = Constants.InstallDir
+                    WorkingDirectory = Constants.InstallDirectory,
+                    Arguments = string.Format("-screen-width {0} -screen-height {1} -screen-fullscreen {2} {3}",
+                        WidthFld.Value, HeightFld.Value, FullScreenOpt.Checked ? 1 : 0, ((RenderApi)RenderApiBox.SelectedItem).Command)
                 };
 
-                psi.Arguments = string.Format("-screen-width {0} -screen-height {1} -screen-fullscreen {2} {3}",
-                    WidthFld.Value, HeightFld.Value, FullScreenOpt.Checked ? 1 : 0, ((RenderApi)RenderApiBox.SelectedItem).Command);
-
                 Process.Start(psi);
-                AppendToLog("\n");
-
-                AppendToLog($"Width: {WidthFld.Value}\n");
-                AppendToLog($"Height: {HeightFld.Value}\n");
-                AppendToLog($"Fullscreen {FullScreenOpt.Checked}\n");
-                AppendToLog($"Rendering API: {RenderApiBox.SelectedItem}\n");
             }
             catch (Exception ex)
             {
-                AppendToLog($"\n\n{ex}");
+                LogError(ex.ToString());
             }
         }
 
         private void UpdateBtn_Click(object sender, EventArgs e)
         {
-            SetLogText("!! PLEASE MAKE SURE GUARDIAN MOD IS NOT OPEN !!\n");
-
             Task.Run(async () =>
             {
-                // Download and display build information
-                try
-                {
-                    AppendToLog("\nObtaining latest build information...");
+                LogInfo("Fetching latest build information");
+                await FetchVersionData();
 
-                    string versionData = await GetVersionData();
-                    AppendToLog($"\n{versionData}");
+                LogInfo("Creating client install directory");
+                if (!CreateClientDirectory()) return;
 
-                    foreach (string buildData in versionData.Split('\n'))
-                    {
-                        string[] buildInfo = buildData.Split(new char[] { '=' }, 2);
-                        if (!buildInfo[0].Equals("LAUNCHER")) continue;
+                LogInfo($"Downloading client for {Constants.PlatformArch}-bit Windows");
+                FileInfo clientFile = new FileInfo(Path.Combine(Constants.WorkingDirectory, Constants.BinaryName));
+                byte[] clientData = await DownloadGame();
+                if (clientData.Length == 0) return;
+                if (!await WriteGameData(clientFile, clientData)) return;
 
-                        string latestBuild = buildInfo[1].Trim();
-                        if (latestBuild.Equals(Constants.AppVersion)) break;
+                LogInfo($"Extracting {clientFile.FullName} to {Constants.InstallDirectory}");
+                ExtractToDirectory(clientFile);
 
-                        AppendToLog("\nYour copy of Paradis is OUT OF DATE, please UPDATE!");
-                        AppendToLog("\n\t- https://aottg.winnpixie.com/");
-                    }
-                }
-                catch (Exception ex)
-                {
-                    AppendToLog($"!! WARNING !! Could not obtain build information!\n\n{ex}\n");
-                }
-
-                // Download zipped client
-                byte[] zippedClientData;
-                try
-                {
-                    AppendToLog($"\nDownloading client for {Constants.OSArch}-bit Windows...");
-                    zippedClientData = await GetGameData();
-                }
-                catch (Exception ex)
-                {
-                    SetLogText($"!! ERROR !! Could not download client data!\n\n{ex}");
-                    return;
-                }
-
-                // Write zipped client data to local file
-                FileInfo zippedClientFile = new FileInfo(Constants.InstallDir + $"\\{Constants.BinaryName}");
-                try
-                {
-                    await WriteGameData(zippedClientFile, zippedClientData);
-                }
-                catch (Exception ex)
-                {
-                    SetLogText($"!! ERROR !! Could not save client data!\n\n{ex}");
-                    return;
-                }
-
-                // Extract zipped client contents to current working directory
-                try
-                {
-                    AppendToLog($"\nExtracting {zippedClientFile.FullName} to {Constants.InstallDir}");
-                    ExtractToDirectory(zippedClientFile);
-                }
-                catch (Exception ex)
-                {
-                    SetLogText($"!! ERROR !! Could not extract client data!\n\n{ex}");
-                    return;
-                }
-
-                // Delete zipped client since we're (hopefully) done with it
-                try
-                {
-                    AppendToLog("\nCleaning up...");
-                    zippedClientFile.Delete();
-                    AppendToLog("\n");
-                }
-                catch (Exception ex)
-                {
-                    AppendToLog($"!! WARNING !! Could not delete update file! (This is *probably* fine?...)\n\n{ex}");
-                }
+                LogInfo("Cleaning up");
+                CleanUp(clientFile);
 
                 if (AutoPlayAfterUpdateOpt.Checked) StartGame(false);
             });
         }
 
-        private async Task<string> GetVersionData()
+        private async Task FetchVersionData()
         {
-            return await Constants.Web.Value.GetStringAsync($"{Constants.VersionUrl}?t={Environment.TickCount}");
-        }
-
-        private async Task<byte[]> GetGameData()
-        {
-            return await Constants.Web.Value.GetByteArrayAsync($"{Constants.BinaryUrl}?t=" + Environment.TickCount);
-        }
-
-        private async Task WriteGameData(FileInfo file, byte[] data)
-        {
-            using (FileStream fs = file.OpenWrite())
+            try
             {
-                await fs.WriteAsync(data, 0, data.Length);
+                string data = await Constants.HttpClient.Value.GetStringAsync($"{Constants.VersionUrl}?t={Environment.TickCount}");
+                LogInfo($"\n{data}");
+
+                foreach (string buildData in data.Split('\n'))
+                {
+                    string[] buildInfo = buildData.Split(new char[] { '=' }, 2);
+                    if (!buildInfo[0].Equals("LAUNCHER")) continue;
+
+                    string latestBuild = buildInfo[1].Trim();
+                    if (latestBuild.Equals(Constants.AppVersion)) break;
+
+                    LogWarning("Your copy of Paradis is OUT OF DATE, please UPDATE!");
+                    LogWarning("\t- https://aottg.winnpixie.com/");
+                }
+            }
+            catch (Exception ex)
+            {
+                LogError(ex.ToString());
+            }
+        }
+
+        private bool CreateClientDirectory()
+        {
+            DirectoryInfo clientDir = new DirectoryInfo(Constants.InstallDirectory);
+            if (!clientDir.Exists)
+            {
+                try
+                {
+                    clientDir.Create();
+                }
+                catch (Exception ex)
+                {
+                    LogError(ex.ToString());
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        private async Task<byte[]> DownloadGame()
+        {
+            try
+            {
+                return await Constants.HttpClient.Value.GetByteArrayAsync($"{Constants.BinaryUrl}?t=" + Environment.TickCount);
+            }
+            catch (Exception ex)
+            {
+                LogError(ex.ToString());
+                return new byte[0];
+            }
+        }
+
+        private async Task<bool> WriteGameData(FileInfo file, byte[] data)
+        {
+            try
+            {
+                using (FileStream fs = file.OpenWrite()) await fs.WriteAsync(data, 0, data.Length);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                LogError(ex.ToString());
+                return false;
             }
         }
 
         private void ExtractToDirectory(FileInfo file)
         {
-            using (ZipArchive archive = ZipFile.OpenRead(file.FullName))
+            try
             {
-                foreach (ZipArchiveEntry entry in archive.Entries)
+                using (ZipArchive archive = ZipFile.OpenRead(file.FullName))
                 {
-                    string path = Constants.InstallDir + "\\" + entry.FullName;
-                    if (path.EndsWith("\\") || path.EndsWith("/"))
+                    foreach (ZipArchiveEntry entry in archive.Entries)
                     {
-                        DirectoryInfo di = new DirectoryInfo(path.Substring(0, path.Length - 1));
-                        di.Create();
-                    }
-                    else
-                    {
-                        AppendToLog($"\nExtracting {entry.FullName}...");
-                        entry.ExtractToFile(path, true);
+                        string path = Path.Combine(Constants.InstallDirectory, entry.FullName);
+                        if (path.EndsWith("\\") || path.EndsWith("/"))
+                        {
+                            DirectoryInfo di = new DirectoryInfo(path.Substring(0, path.Length - 1));
+                            di.Create();
+                        }
+                        else
+                        {
+                            LogInfo($"Extracting {entry.FullName}");
+                            entry.ExtractToFile(path, true);
+                        }
                     }
                 }
+            }
+            catch (Exception ex)
+            {
+                LogError(ex.ToString());
+            }
+        }
+
+        private void CleanUp(FileInfo file)
+        {
+            try
+            {
+                file.Delete();
+            }
+            catch (Exception ex)
+            {
+                LogError(ex.ToString());
             }
         }
 

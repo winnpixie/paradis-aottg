@@ -86,7 +86,7 @@ namespace Paradis
             // 
             this.LogBox.AutoWordSelection = true;
             this.LogBox.BackColor = System.Drawing.Color.Black;
-            this.LogBox.Font = new System.Drawing.Font("Segoe UI", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
+            this.LogBox.Font = new System.Drawing.Font("Courier New", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
             this.LogBox.ForeColor = System.Drawing.Color.Lime;
             this.LogBox.Location = new System.Drawing.Point(434, 13);
             this.LogBox.Margin = new System.Windows.Forms.Padding(5, 4, 5, 4);
@@ -160,6 +160,8 @@ namespace Paradis
             // FullScreenOpt
             // 
             this.FullScreenOpt.AutoSize = true;
+            this.FullScreenOpt.Checked = true;
+            this.FullScreenOpt.CheckState = System.Windows.Forms.CheckState.Checked;
             this.FullScreenOpt.Location = new System.Drawing.Point(224, 186);
             this.FullScreenOpt.Margin = new System.Windows.Forms.Padding(4);
             this.FullScreenOpt.Name = "FullScreenOpt";
